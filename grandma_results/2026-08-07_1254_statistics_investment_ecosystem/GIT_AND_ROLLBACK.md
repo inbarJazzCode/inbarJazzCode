@@ -42,6 +42,10 @@ python main.py backup    # (creates one first if needed)
 
 ## Push / PR
 
-See the final chat report for push and pull-request status. The private Git
-branch is the second recovery channel; the ZIP in this folder is the primary
-local handoff artifact.
+The branch was pushed to `inbarJazzCode/inbarJazzCode` (which is **public**).
+Creating a new **private** repo and opening a PR could not be completed from
+this session (the token is scoped to the single existing repo; repo creation and
+branch deletion returned HTTP 403). **See `REMOTE_STATUS.md` for the exact
+commands to create the private repo, push there, and remove the work from the
+public profile repo.** The ZIP in this folder is the primary, self-contained
+handoff artifact.
