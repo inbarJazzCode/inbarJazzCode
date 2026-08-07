@@ -16,6 +16,8 @@ a = Analysis(
     binaries=[],
     datas=[
         ('fixtures/synthetic_prices.csv', 'fixtures'),
+        ('assets/statinvest.ico', 'assets'),
+        ('assets/statinvest_icon.png', 'assets'),
     ],
     hiddenimports=[
         'statinvest.database.db',
@@ -48,4 +50,5 @@ exe = EXE(
     strip=False,
     upx=False,
     console=True,
+    icon='assets/statinvest.ico',
 )

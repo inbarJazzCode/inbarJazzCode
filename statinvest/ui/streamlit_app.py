@@ -29,7 +29,10 @@ def _run():  # pragma: no cover - requires the Streamlit runtime
     from statinvest.models.poisson import PoissonModel
     from statinvest.service import AnalysisService, export_watchlist_csv
 
-    st.set_page_config(page_title="Statistics & Investment Eco-System",
+    from pathlib import Path
+    _icon = Path(__file__).resolve().parents[2] / "assets" / "statinvest_icon.png"
+    st.set_page_config(page_title="Investment Eco-System",
+                       page_icon=str(_icon) if _icon.exists() else "📈",
                        layout="wide", initial_sidebar_state="expanded")
     st.title(APP_NAME)
     st.caption(DISCLAIMER)
