@@ -42,3 +42,7 @@ logs/
 *.log
 tmp/
 .DS_Store
+
+# Handoff: keep docs + ZIP, exclude the redundant source snapshot copy
+grandma_results/*/source_snapshot/
+grandma_results/*/backups/

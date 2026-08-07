@@ -1,0 +1,61 @@
+# FILE MANIFEST
+
+## Handoff documents
+- FINAL_HANDOFF.md
+- RUN_INSTRUCTIONS.md
+- ARCHITECTURE_SUMMARY.md
+- STATISTICAL_VALIDATION.md
+- TEST_RESULTS.md
+- SECURITY_REVIEW.md
+- KNOWN_LIMITATIONS.md
+- GIT_AND_ROLLBACK.md
+- FILE_MANIFEST.md
+- SHA256SUMS.txt
+
+## Source snapshot (source_snapshot/)
+- .gitignore
+- ARCHITECTURE.md
+- README.md
+- SECURITY.md
+- fixtures/synthetic_prices.csv
+- main.py
+- pytest.ini
+- requirements-dev.txt
+- requirements.txt
+- run_windows.bat
+- smoke_test.py
+- statinvest.spec
+- statinvest/__init__.py
+- statinvest/config.py
+- statinvest/database/__init__.py
+- statinvest/database/db.py
+- statinvest/database/repository.py
+- statinvest/database/schema.py
+- statinvest/launcher.py
+- statinvest/market/__init__.py
+- statinvest/market/normalize.py
+- statinvest/market/provider.py
+- statinvest/market/validate.py
+- statinvest/models/__init__.py
+- statinvest/models/_util.py
+- statinvest/models/evaluation.py
+- statinvest/models/linear.py
+- statinvest/models/logistic.py
+- statinvest/models/optim.py
+- statinvest/models/poisson.py
+- statinvest/models/serialize.py
+- statinvest/models/transforms.py
+- statinvest/service.py
+- statinvest/ui/__init__.py
+- statinvest/ui/desktop.py
+- statinvest/ui/streamlit_app.py
+- tests/__init__.py
+- tests/conftest.py
+- tests/test_database.py
+- tests/test_launcher.py
+- tests/test_market_and_service.py
+- tests/test_models_logistic.py
+- tests/test_models_ols.py
+- tests/test_models_poisson.py
+- tests/test_models_support.py
+- tests/test_network_integration.py
