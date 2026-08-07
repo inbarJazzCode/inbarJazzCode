@@ -17,6 +17,45 @@ STATUS_BADGE = {
 }
 
 
+def _brand(st, icon_path):  # pragma: no cover - requires the Streamlit runtime
+    """Branded header: logo, product name, byline, disclaimer."""
+    import base64
+    from pathlib import Path
+
+    from statinvest.config import __version__
+
+    logo = Path(icon_path).with_name("statinvest_logo.png")
+    src = logo if logo.exists() else Path(icon_path)
+    b64 = ""
+    if src.exists():
+        b64 = base64.b64encode(src.read_bytes()).decode()
+
+    img = (f'<img src="data:image/png;base64,{b64}" alt="Investment Eco-System logo" '
+           f'style="width:74px;height:74px;border-radius:16px;flex:none;'
+           f'box-shadow:0 4px 14px rgba(0,80,160,.28)">') if b64 else ""
+
+    st.markdown(
+        f"""
+        <div style="display:flex;align-items:center;gap:18px;padding:6px 0 14px;
+                    border-bottom:1px solid rgba(128,150,165,.28);margin-bottom:18px;">
+          {img}
+          <div style="display:flex;flex-direction:column;gap:3px;min-width:0;">
+            <div style="font-size:1.55rem;font-weight:700;letter-spacing:-.02em;
+                        line-height:1.12;">Investment Eco-System</div>
+            <div style="font-size:.95rem;opacity:.72;">
+              OLS · Logistic · Poisson &nbsp;—&nbsp; <b>by Inbar</b>
+            </div>
+            <div style="font-family:ui-monospace,Menlo,monospace;font-size:.68rem;
+                        letter-spacing:.12em;text-transform:uppercase;opacity:.5;
+                        margin-top:2px;">v{__version__} · research build</div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.caption(DISCLAIMER)
+
+
 def _run():  # pragma: no cover - requires the Streamlit runtime
     import pandas as pd
     import streamlit as st
@@ -34,8 +73,7 @@ def _run():  # pragma: no cover - requires the Streamlit runtime
     st.set_page_config(page_title="Investment Eco-System",
                        page_icon=str(_icon) if _icon.exists() else "📈",
                        layout="wide", initial_sidebar_state="expanded")
-    st.title(APP_NAME)
-    st.caption(DISCLAIMER)
+    _brand(st, _icon)
 
     provider = st.sidebar.selectbox(
         "Data provider", ["yahoo-chart", "synthetic", "yfinance"], index=0,
