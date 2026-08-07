@@ -42,8 +42,9 @@ def _brand(st, icon_path):  # pragma: no cover - requires the Streamlit runtime
           <div style="display:flex;flex-direction:column;gap:3px;min-width:0;">
             <div style="font-size:1.55rem;font-weight:700;letter-spacing:-.02em;
                         line-height:1.12;">Invest-System</div>
-            <div style="font-size:.95rem;opacity:.72;">
-              OLS · Logistic · Poisson &nbsp;—&nbsp; <b>by Inbar</b>
+            <div style="font-size:.95rem;opacity:.75;">
+              <b>Eco-Platform</b> &nbsp;·&nbsp; OLS · Logistic · Poisson
+              &nbsp;—&nbsp; <b>by Inbar</b>
             </div>
             <div style="font-family:ui-monospace,Menlo,monospace;font-size:.68rem;
                         letter-spacing:.12em;text-transform:uppercase;opacity:.5;
