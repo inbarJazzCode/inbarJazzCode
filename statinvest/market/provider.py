@@ -113,6 +113,15 @@ class SyntheticProvider:
         return rows
 
 
+# Yahoo rejects requests that do not present a browser User-Agent (HTTP 429),
+# so both providers below identify themselves with one. This is a plain
+# identification header, not an attempt to bypass any access control.
+BROWSER_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+)
+
+
 class YFinanceProvider:
     """Optional live provider backed by yfinance (imported lazily)."""
 
@@ -136,7 +145,13 @@ class YFinanceProvider:
         last_err = None
         for attempt in range(1, self.retries + 1):
             try:
-                ticker = yf.Ticker(sym)
+                try:  # identify with a browser UA; Yahoo 429s otherwise
+                    import requests
+                    sess = requests.Session()
+                    sess.headers["User-Agent"] = BROWSER_UA
+                    ticker = yf.Ticker(sym, session=sess)
+                except Exception:
+                    ticker = yf.Ticker(sym)
                 info = ticker.fast_info if hasattr(ticker, "fast_info") else {}
                 full = {}
                 try:
@@ -218,11 +233,114 @@ def _guess_type(sym: str) -> str:
     return "EQUITY"
 
 
+class YahooChartProvider:
+    """Live provider using Yahoo's public chart endpoint directly.
+
+    More reliable than the yfinance wrapper in restricted environments: it
+    needs only the standard library, presents a browser User-Agent (without
+    which Yahoo returns HTTP 429), and applies bounded retries with backoff.
+    Returns daily history, which is what the model lab actually consumes.
+    """
+
+    name = "yahoo-chart"
+    BASE = "https://query1.finance.yahoo.com/v8/finance/chart/"
+
+    def __init__(self, retries: int = 4, backoff: float = 3.0, timeout: float = 30.0,
+                 range_: str = "5y"):
+        self.retries = retries
+        self.backoff = backoff
+        self.timeout = timeout
+        self.range = range_
+
+    def _get(self, sym: str) -> dict | None:
+        import json as _json
+        import urllib.error
+        import urllib.parse
+        import urllib.request
+
+        url = f"{self.BASE}{urllib.parse.quote(sym)}?range={self.range}&interval=1d"
+        for attempt in range(1, self.retries + 1):
+            try:
+                req = urllib.request.Request(url, headers={"User-Agent": BROWSER_UA})
+                with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+                    return _json.load(resp)
+            except Exception:
+                if attempt < self.retries:
+                    time.sleep(self.backoff * attempt)  # bounded, never infinite
+        return None
+
+    def fetch(self, symbol: str, with_history: bool = False,
+              history_points: int = 250) -> MarketData:
+        sym = validate_symbol(symbol)
+        doc = self._get(sym)
+        if not doc or not doc.get("chart", {}).get("result"):
+            return MarketData(symbol=sym, fetched_at_utc=_now_iso(), source=self.name,
+                              data_status="ERROR",
+                              error_summary="provider returned no result")
+        res = doc["chart"]["result"][0]
+        meta = res.get("meta", {})
+        price = _num(meta.get("regularMarketPrice"))
+        norm = normalize_price(price, meta.get("currency"))
+        md = MarketData(
+            symbol=sym,
+            fetched_at_utc=_now_iso(),
+            price=norm.normalized_price,
+            raw_price=norm.raw_price,
+            normalized_price=norm.normalized_price,
+            raw_currency=norm.raw_currency,
+            normalized_currency=norm.normalized_currency,
+            asset_type=(meta.get("instrumentType") or "").upper() or None,
+            display_name=meta.get("shortName") or meta.get("longName"),
+            exchange=meta.get("fullExchangeName"),
+            source=self.name,
+            data_status="DELAYED" if price is not None else "PARTIAL",
+            normalization_rule=norm.rule,
+        )
+        if with_history:
+            md.history = self._history(res, history_points)
+        return md
+
+    @staticmethod
+    def _history(res: dict, n: int) -> list[dict]:
+        from datetime import datetime as _dt
+
+        ts = res.get("timestamp") or []
+        q = (res.get("indicators", {}).get("quote") or [{}])[0]
+        adj = (res.get("indicators", {}).get("adjclose") or [{}])[0].get("adjclose")
+        closes = q.get("close") or []
+        rows = []
+        for i, t in enumerate(ts):
+            c = closes[i] if i < len(closes) else None
+            if c is None:
+                continue
+            rows.append({
+                "ts_utc": _dt.fromtimestamp(t, timezone.utc).isoformat(),
+                "open": _num(_at(q.get("open"), i)),
+                "high": _num(_at(q.get("high"), i)),
+                "low": _num(_at(q.get("low"), i)),
+                "close": _num(c),
+                "adj_close": _num(_at(adj, i)) if adj else _num(c),
+                "volume": _num(_at(q.get("volume"), i)),
+            })
+        return rows[-n:]
+
+
+def _at(seq, i):
+    try:
+        return seq[i]
+    except (TypeError, IndexError):
+        return None
+
+
 def get_provider(name: str = "synthetic", **kwargs):
     """Return a provider by name. Defaults to the offline synthetic provider."""
     name = (name or "synthetic").lower()
     if name == "synthetic":
         return SyntheticProvider()
+    if name in ("yahoo-chart", "chart"):
+        return YahooChartProvider(**kwargs)
     if name in ("yfinance", "yahoo"):
         return YFinanceProvider(**kwargs)
-    raise ValueError(f"Unknown provider '{name}'. Use 'synthetic' or 'yfinance'.")
+    raise ValueError(
+        f"Unknown provider '{name}'. Use 'synthetic', 'yahoo-chart' or 'yfinance'."
+    )
