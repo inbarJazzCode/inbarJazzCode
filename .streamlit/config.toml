@@ -1,0 +1,12 @@
+# Project-level Streamlit settings.
+# These apply even when Streamlit is started directly rather than through
+# `python main.py streamlit`.
+
+[browser]
+# No telemetry, analytics or hidden uploads.
+gatherUsageStats = false
+
+[server]
+# Never bind beyond the local machine.
+address = "localhost"
+headless = true

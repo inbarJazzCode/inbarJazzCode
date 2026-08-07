@@ -83,6 +83,8 @@ def main(argv: list[str] | None = None) -> int:
             "--server.address", "localhost",
             "--server.port", str(args.port),
             "--server.headless", "true",
+            # No telemetry: Streamlit otherwise phones home with usage stats.
+            "--browser.gatherUsageStats", "false",
         ]
         print(f"Launching Streamlit on http://localhost:{args.port} ...")
         return subprocess.call(cmd)
