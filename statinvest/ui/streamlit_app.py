@@ -1,4 +1,4 @@
-"""Streamlit UI for the Statistics & Investment Eco-System.
+"""Streamlit UI for Invest-System.
 
 Launch via the unified launcher: ``python main.py streamlit`` (binds to
 localhost). All persistence goes through the shared service layer so a logical
@@ -30,7 +30,7 @@ def _brand(st, icon_path):  # pragma: no cover - requires the Streamlit runtime
     if src.exists():
         b64 = base64.b64encode(src.read_bytes()).decode()
 
-    img = (f'<img src="data:image/png;base64,{b64}" alt="Investment Eco-System logo" '
+    img = (f'<img src="data:image/png;base64,{b64}" alt="Invest-System logo" '
            f'style="width:74px;height:74px;border-radius:16px;flex:none;'
            f'box-shadow:0 4px 14px rgba(0,80,160,.28)">') if b64 else ""
 
@@ -41,7 +41,7 @@ def _brand(st, icon_path):  # pragma: no cover - requires the Streamlit runtime
           {img}
           <div style="display:flex;flex-direction:column;gap:3px;min-width:0;">
             <div style="font-size:1.55rem;font-weight:700;letter-spacing:-.02em;
-                        line-height:1.12;">Investment Eco-System</div>
+                        line-height:1.12;">Invest-System</div>
             <div style="font-size:.95rem;opacity:.72;">
               OLS · Logistic · Poisson &nbsp;—&nbsp; <b>by Inbar</b>
             </div>
@@ -70,7 +70,7 @@ def _run():  # pragma: no cover - requires the Streamlit runtime
 
     from pathlib import Path
     _icon = Path(__file__).resolve().parents[2] / "assets" / "statinvest_icon.png"
-    st.set_page_config(page_title="Investment Eco-System",
+    st.set_page_config(page_title="Invest-System",
                        page_icon=str(_icon) if _icon.exists() else "📈",
                        layout="wide", initial_sidebar_state="expanded")
     _brand(st, _icon)

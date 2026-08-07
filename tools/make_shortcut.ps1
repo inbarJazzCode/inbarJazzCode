@@ -22,24 +22,27 @@ if ([string]::IsNullOrWhiteSpace($desktop)) {
     exit 1
 }
 
-$link = Join-Path $desktop 'Investment Eco-System - Inbar.lnk'
+$link = Join-Path $desktop 'Invest-System - Inbar.lnk'
 
 # Remove an earlier, differently-named shortcut so you don't end up with two.
-$old = Join-Path $desktop 'Investment Eco-System.lnk'
-if ((Test-Path $old) -and ($old -ne $link)) { Remove-Item $old -Force -ErrorAction SilentlyContinue }
+$oldNames = @('Investment Eco-System.lnk','Investment Eco-System - Inbar.lnk')
+foreach ($n in $oldNames) {
+    $o = Join-Path $desktop $n
+    if ((Test-Path $o) -and ($o -ne $link)) { Remove-Item $o -Force -ErrorAction SilentlyContinue }
+}
 
 $shell = New-Object -ComObject WScript.Shell
 $sc = $shell.CreateShortcut($link)
 $sc.TargetPath        = $target
 $sc.WorkingDirectory  = $root
-$sc.Description       = 'Investment Eco-System by Inbar - OLS, Logistic & Poisson'
+$sc.Description       = 'Invest-System by Inbar - OLS, Logistic & Poisson'
 if (Test-Path $icon) { $sc.IconLocation = "$icon,0" }
 $sc.Save()
 
 Write-Host ''
 Write-Host ' [OK] Desktop icon created.' -ForegroundColor Green
 Write-Host ''
-Write-Host "      Name    : Investment Eco-System - Inbar"
+Write-Host "      Name    : Invest-System - Inbar"
 Write-Host "      Desktop : $desktop"
 Write-Host "      Launches: $target"
 Write-Host ''

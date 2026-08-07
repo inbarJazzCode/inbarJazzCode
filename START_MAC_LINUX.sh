@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ===================================================================
-#  Statistics & Investment Eco-System  --  one-click start (Mac/Linux)
+#  Invest-System  -  OLS, Logistic & Poisson  --  one-click start (Mac/Linux)
 #
 #  Mac:   right-click this file -> Open With -> Terminal
 #         (first time only: run  chmod +x START_MAC_LINUX.sh )
@@ -11,7 +11,7 @@ cd "$(dirname "$0")"
 
 echo
 echo " ============================================================"
-echo "  Statistics & Investment Eco-System"
+echo "  Invest-System  -  OLS, Logistic & Poisson"
 echo "  Starting up. The first run takes 2-3 minutes."
 echo " ============================================================"
 echo

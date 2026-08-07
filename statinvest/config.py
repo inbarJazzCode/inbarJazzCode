@@ -13,10 +13,14 @@ from pathlib import Path
 
 __version__ = "1.0.0"
 
-# Human-facing product name (exact).
-APP_NAME = "Statistics & Investment Eco-System — OLS, Logistic & Poisson"
+# Human-facing product name. Everything user-visible derives from these two.
+APP_NAME = "Invest-System — OLS, Logistic & Poisson"
 # Filesystem / repository-safe slug.
-APP_SLUG = "statistics-investment-eco-system"
+APP_SLUG = "invest-system"
+
+# Directory names used by earlier releases. Kept only so an existing database
+# is still found after the product was renamed; never written to fresh.
+LEGACY_SLUGS = ("statistics-investment-eco-system",)
 
 DISCLAIMER = (
     "Educational / research use only. Market data may be delayed and depends on "
@@ -55,14 +59,29 @@ def data_dir() -> Path:
 
     Resolution order:
       1. ``STATINVEST_DATA_DIR`` environment variable (used by tests).
-      2. ``~/.local/share/statistics-investment-eco-system`` (XDG-ish default).
+      2. ``~/.local/share/invest-system`` (XDG-ish default).
+      3. A legacy directory from an earlier product name, if it still holds a
+         database and the current one does not — so renaming the product never
+         orphans a user's existing data.
     """
     override = os.environ.get("STATINVEST_DATA_DIR")
     if override:
         path = Path(override).expanduser()
-    else:
-        base = os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
-        path = Path(base) / APP_SLUG
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    base = Path(os.environ.get("XDG_DATA_HOME") or (Path.home() / ".local" / "share"))
+    path = base / APP_SLUG
+
+    # The slug has changed across releases. If the current directory has no
+    # database yet but an older one does, keep using the older one rather than
+    # silently starting from an empty database.
+    if not (path / DB_FILENAME).exists():
+        for legacy in LEGACY_SLUGS:
+            old = base / legacy
+            if (old / DB_FILENAME).exists():
+                return old
+
     path.mkdir(parents=True, exist_ok=True)
     return path
 

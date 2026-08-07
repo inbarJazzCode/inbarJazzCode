@@ -1,4 +1,4 @@
-"""Offline smoke test for the Statistics & Investment Eco-System.
+"""Offline smoke test for the Invest-System.
 
 Requires no network. Exercises the statistical core, the database layer and the
 shared service end to end, and prints ``SMOKE PASS`` only if every check passes.

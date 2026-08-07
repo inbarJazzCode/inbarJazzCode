@@ -9,7 +9,7 @@ title Create Desktop icon
 
 echo.
 echo  ============================================================
-echo   Investment Eco-System  -  create Desktop icon
+echo   Invest-System  -  create Desktop icon
 echo  ============================================================
 
 if not exist "%~dp0START_WINDOWS.bat" (

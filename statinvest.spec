@@ -1,5 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller spec for the Statistics & Investment Eco-System desktop UI.
+"""PyInstaller spec for the Invest-System desktop UI.
 
 Build:  pyinstaller statinvest.spec
 
@@ -44,7 +44,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='statistics-investment-eco-system',
+    name='invest-system',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

@@ -1,4 +1,4 @@
-"""Top-level entry point for the Statistics & Investment Eco-System.
+"""Top-level entry point for Invest-System.
 
 Run ``python main.py --help`` to see the supported modes.
 """

@@ -1,16 +1,16 @@
 @echo off
 REM ===================================================================
-REM  Statistics & Investment Eco-System  --  one-click start (Windows)
+REM  Invest-System  --  one-click start (Windows)
 REM  Double-click this file. It does everything: checks Python, installs
 REM  what it needs the first time, then opens the app in your browser.
 REM ===================================================================
 setlocal
 cd /d "%~dp0"
-title Statistics ^& Investment Eco-System
+title Invest-System  -  OLS, Logistic ^& Poisson
 
 echo.
 echo  ============================================================
-echo   Statistics ^& Investment Eco-System
+echo   Invest-System  -  OLS, Logistic ^& Poisson
 echo   Starting up. The first run takes 2-3 minutes.
 echo  ============================================================
 echo.

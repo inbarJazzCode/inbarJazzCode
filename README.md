@@ -1,4 +1,4 @@
-# Statistics & Investment Eco-System — OLS, Logistic & Poisson
+# Invest-System — OLS, Logistic & Poisson
 
 A **local-first, research-grade** investment-analysis application. It combines a
 transparent statistical-modeling laboratory (OLS, binary logistic and Poisson
@@ -63,7 +63,7 @@ and leakage-resistant chronological / walk-forward splitting.
 ## Data storage
 
 SQLite lives in a per-user application-data directory
-(`~/.local/share/statistics-investment-eco-system/statinvest.db`, overridable via
+(`~/.local/share/invest-system/statinvest.db`, overridable via
 `STATINVEST_DATA_DIR`). Schema is versioned with ordered migrations; a verified
 timestamped backup is taken before any schema upgrade. See
 [`ARCHITECTURE.md`](ARCHITECTURE.md).

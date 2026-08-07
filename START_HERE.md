@@ -81,8 +81,8 @@ python main.py integrity    # checks the database
 
 The app creates its own database at:
 
-- **Windows** — `C:\Users\<you>\.local\share\statistics-investment-eco-system\`
-- **Mac/Linux** — `~/.local/share/statistics-investment-eco-system/`
+- **Windows** — `C:\Users\<you>\.local\share\invest-system\`
+- **Mac/Linux** — `~/.local/share/invest-system/`
 
 Nothing is uploaded anywhere. No telemetry, no accounts, no network calls except
 fetching market prices when you ask for them.

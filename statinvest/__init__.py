@@ -1,4 +1,4 @@
-"""Statistics & Investment Eco-System.
+"""Invest-System.
 
 A local-first, research-grade investment analysis application providing
 OLS, binary logistic and Poisson regression, transparent SGD/Adam
