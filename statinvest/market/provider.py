@@ -244,13 +244,90 @@ class YahooChartProvider:
 
     name = "yahoo-chart"
     BASE = "https://query1.finance.yahoo.com/v8/finance/chart/"
+    CRUMB_URL = "https://query1.finance.yahoo.com/v1/test/getcrumb"
+    COOKIE_URL = "https://fc.yahoo.com/"
+    SUMMARY = "https://query2.finance.yahoo.com/v10/finance/quoteSummary/"
 
     def __init__(self, retries: int = 4, backoff: float = 3.0, timeout: float = 30.0,
-                 range_: str = "5y"):
+                 range_: str = "5y", fundamentals: bool = True):
         self.retries = retries
         self.backoff = backoff
         self.timeout = timeout
         self.range = range_
+        self.fundamentals = fundamentals
+        self._session = None
+        self._crumb = None
+
+    # -- fundamentals (P/E, EPS, market cap) --------------------------------
+    def _auth(self):
+        """Establish Yahoo's cookie + crumb pair, required for fundamentals.
+
+        Returns (session, crumb) or (None, None) if unavailable. Cached per
+        instance so repeated fetches do not re-handshake.
+        """
+        if self._session is not None:
+            return self._session, self._crumb
+        try:
+            import requests
+        except Exception:
+            return None, None
+        try:
+            s = requests.Session()
+            s.headers["User-Agent"] = BROWSER_UA
+            try:
+                s.get(self.COOKIE_URL, timeout=self.timeout)
+            except Exception:
+                pass  # 404 is normal here; the cookie is still set
+            r = s.get(self.CRUMB_URL, timeout=self.timeout)
+            crumb = r.text.strip() if r.status_code == 200 else None
+            if not crumb or len(crumb) > 32:
+                return None, None
+            self._session, self._crumb = s, crumb
+            return s, crumb
+        except Exception:
+            return None, None
+
+    @staticmethod
+    def _raw(node, key):
+        v = (node or {}).get(key)
+        if isinstance(v, dict):
+            return _num(v.get("raw"))
+        return _num(v)
+
+    def _fundamentals(self, sym: str) -> dict:
+        """Fetch valuation fields. Returns {} when unavailable — never raises."""
+        s, crumb = self._auth()
+        if not s or not crumb:
+            return {}
+        import urllib.parse
+        url = (f"{self.SUMMARY}{urllib.parse.quote(sym)}?modules="
+               f"defaultKeyStatistics,summaryDetail,financialData&crumb="
+               f"{urllib.parse.quote(crumb)}")
+        for attempt in range(1, self.retries + 1):
+            try:
+                r = s.get(url, timeout=self.timeout)
+                if r.status_code != 200:
+                    raise RuntimeError(f"status {r.status_code}")
+                res = r.json().get("quoteSummary", {}).get("result") or []
+                if not res:
+                    return {}
+                d = res[0]
+                sd, ks, fd = (d.get("summaryDetail"), d.get("defaultKeyStatistics"),
+                              d.get("financialData"))
+                return {
+                    "trailing_pe": self._raw(sd, "trailingPE"),
+                    "forward_pe": self._raw(sd, "forwardPE"),
+                    "eps": self._raw(ks, "trailingEps"),
+                    "market_cap": self._raw(sd, "marketCap"),
+                    "price_to_book": self._raw(ks, "priceToBook"),
+                    "dividend_yield": self._raw(sd, "dividendYield"),
+                    "profit_margin": self._raw(fd, "profitMargins"),
+                    "net_income": self._raw(ks, "netIncomeToCommon"),
+                }
+            except Exception:
+                if attempt < self.retries:
+                    time.sleep(self.backoff * attempt)
+        return {}
 
     def _get(self, sym: str) -> dict | None:
         import json as _json
@@ -281,6 +358,21 @@ class YahooChartProvider:
         meta = res.get("meta", {})
         price = _num(meta.get("regularMarketPrice"))
         norm = normalize_price(price, meta.get("currency"))
+        asset_type = (meta.get("instrumentType") or "").upper() or None
+
+        # Valuation fields only apply to companies. An index, ETF, currency or
+        # crypto has no P/E — absent values there are correct, not a failure.
+        f = {}
+        if self.fundamentals and asset_type == "EQUITY":
+            f = self._fundamentals(sym)
+
+        trailing_pe = f.get("trailing_pe")
+        eps = f.get("eps")
+        if trailing_pe is None:
+            # Fall back to a P/E computed from normalized price and EPS in the
+            # same unit, so agorot-quoted shares stay consistent.
+            trailing_pe = consistent_pe(norm.normalized_price, eps)
+
         md = MarketData(
             symbol=sym,
             fetched_at_utc=_now_iso(),
@@ -289,7 +381,12 @@ class YahooChartProvider:
             normalized_price=norm.normalized_price,
             raw_currency=norm.raw_currency,
             normalized_currency=norm.normalized_currency,
-            asset_type=(meta.get("instrumentType") or "").upper() or None,
+            eps=eps,
+            market_cap=f.get("market_cap"),
+            trailing_pe=trailing_pe,
+            forward_pe=f.get("forward_pe"),
+            net_income=f.get("net_income"),
+            asset_type=asset_type,
             display_name=meta.get("shortName") or meta.get("longName"),
             exchange=meta.get("fullExchangeName"),
             source=self.name,
