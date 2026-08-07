@@ -1,0 +1,4 @@
+-r requirements.txt
+pytest>=7.0
+pip-audit>=2.6
+pyinstaller>=6.0

@@ -1,0 +1,44 @@
+# Secrets / environment
+.env
+.env.*
+*.pem
+*.key
+
+# Databases and backups (never commit live data)
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+backups/
+*.bak
+
+# Market-data caches and user exports
+data_cache/
+*.csv
+*.xlsx
+!fixtures/*.csv
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+
+# Build / packaging outputs (keep the source .spec tracked)
+dist/
+build/
+*.egg-info/
+
+# Frontend (if ever added)
+node_modules/
+
+# Logs / temp
+logs/
+*.log
+tmp/
+.DS_Store

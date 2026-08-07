@@ -1,0 +1,14 @@
+# Core numerical / statistical stack (required)
+numpy>=1.26
+scipy>=1.11
+pandas>=2.0
+
+# User interfaces
+streamlit>=1.30
+
+# Optional live market-data provider. The application runs fully offline with
+# the synthetic provider if yfinance or the network is unavailable.
+yfinance>=0.2
+
+# Development / audit tooling (optional):
+#   pip install pytest pip-audit
