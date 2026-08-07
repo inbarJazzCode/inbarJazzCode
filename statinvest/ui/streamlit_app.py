@@ -24,9 +24,14 @@ def _run():  # pragma: no cover - requires the Streamlit runtime
     st.title(APP_NAME)
     st.caption(DISCLAIMER)
 
-    if "service" not in st.session_state:
-        provider = st.sidebar.selectbox("Data provider", ["synthetic", "yfinance"], index=0)
+    provider = st.sidebar.selectbox(
+        "Data provider", ["synthetic", "yahoo-chart", "yfinance"], index=0,
+        help="synthetic = offline demo data (no internet needed). "
+             "yahoo-chart = live prices from Yahoo. yfinance = the yfinance library.",
+    )
+    if "service" not in st.session_state or st.session_state.get("provider") != provider:
         st.session_state.service = AnalysisService(provider_name=provider)
+        st.session_state.provider = provider
     service = st.session_state.service
 
     status = service.status()
