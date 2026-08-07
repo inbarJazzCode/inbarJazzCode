@@ -46,3 +46,8 @@ tmp/
 # Handoff: keep docs + ZIP, exclude the redundant source snapshot copy
 grandma_results/*/source_snapshot/
 grandma_results/*/backups/
+
+# LLM assistant: never commit any key material
+*.key
+secrets.toml
+.streamlit/secrets.toml

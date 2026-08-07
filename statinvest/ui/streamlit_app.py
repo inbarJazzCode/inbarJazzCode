@@ -52,8 +52,9 @@ def _run():  # pragma: no cover - requires the Streamlit runtime
         st.write(f"Rows: {status['row_counts']}")
         st.info("Coverage depends on Yahoo/yfinance. TA-125 is a preset, not the full scope.")
 
-    tab_market, tab_lab, tab_optim, tab_watch = st.tabs(
-        ["📊 Market data", "🧪 Model lab", "⚙️ Estimator comparison", "⭐ Watchlist"]
+    tab_market, tab_lab, tab_optim, tab_ai, tab_watch = st.tabs(
+        ["📊 Market data", "🧪 Model lab", "⚙️ Estimator comparison",
+         "🤖 AI explainer", "⭐ Watchlist"]
     )
 
     # ── Market data ────────────────────────────────────────────────────────
@@ -243,6 +244,99 @@ def _run():  # pragma: no cover - requires the Streamlit runtime
                 "`converged = False`, or a large gap against the reference, its "
                 "coefficients should not be interpreted — regardless of how the loss looks."
             )
+
+    # ── AI explainer (optional) ────────────────────────────────────────────
+    with tab_ai:
+        from statinvest.assistant import (
+            FREE_BACKENDS, AssistantConfig, AssistantError, build_facts,
+            describe_payload, explain,
+        )
+
+        st.subheader("Explain results in plain language")
+        st.caption(
+            "Optional. Off unless you configure it. The assistant only puts the numbers "
+            "into words — every figure is still computed by this app's own estimators."
+        )
+
+        backend = st.selectbox("Backend", list(FREE_BACKENDS.keys()), index=3)
+        base_url, default_model = FREE_BACKENDS[backend]
+        bc1, bc2 = st.columns(2)
+        base_url = bc1.text_input("Base URL (OpenAI-compatible)", value=base_url)
+        model_name = bc2.text_input("Model", value=default_model)
+        cfg = AssistantConfig(base_url=base_url, model=model_name)
+
+        s = cfg.status()
+        if s["local"]:
+            st.success(
+                f"Local backend — no API key needed and **nothing leaves your computer**. "
+                f"Make sure the server is running at `{base_url}`."
+            )
+        elif s["key_present"]:
+            st.success(f"API key found in `{s['key_env_var']}`. Ready.")
+        else:
+            st.warning(
+                f"No API key set. Provide one in the `{s['key_env_var']}` environment "
+                "variable before starting the app — for example:\n\n"
+                f"```\nWindows:  set {s['key_env_var']}=your-key-here\n"
+                f"Mac/Linux: export {s['key_env_var']}=your-key-here\n```\n"
+                "The key is read from the environment only. It is never written to the "
+                "database, never committed to Git and never displayed here."
+            )
+
+        st.divider()
+        demo = st.radio("Explain which result?",
+                        ["A weak model (low R², fails out-of-sample)",
+                         "A strong model"], horizontal=False)
+        if demo.startswith("A weak"):
+            facts = build_facts(
+                {"family": "ols", "target": "KO daily return",
+                 "features": ["S&P 500 daily return"], "formula": "r_KO ~ const + r_SPX",
+                 "n_observations": 1254},
+                {"family": "ols", "n": 1254, "r_squared": 0.0728, "se_type": "hc3",
+                 "coefficients": [
+                     {"term": "const", "coef": 0.000381, "std_err": 0.000290, "p_value": 0.190},
+                     {"term": "r_SPX", "coef": 0.2634, "std_err": 0.0389, "p_value": 2e-11}],
+                 "warnings": ["Residuals are heteroskedastic; HC3 errors used."]},
+                extra={"out_of_sample_roc_auc": 0.436, "in_sample_roc_auc": 0.686,
+                       "majority_baseline": 0.5066,
+                       "note": "chronological 70/30 split, no shuffling"})
+        else:
+            facts = build_facts(
+                {"family": "ols", "target": "NVDA daily return",
+                 "features": ["S&P 500 daily return"], "formula": "r_NVDA ~ const + r_SPX",
+                 "n_observations": 1254},
+                {"family": "ols", "n": 1254, "r_squared": 0.5078, "se_type": "hc3",
+                 "coefficients": [
+                     {"term": "const", "coef": 0.00135, "std_err": 0.00065, "p_value": 0.037},
+                     {"term": "r_SPX", "coef": 2.1714, "std_err": 0.0640, "p_value": 1.9e-179}],
+                 "warnings": []},
+                extra={"out_of_sample_roc_auc": 0.815, "in_sample_roc_auc": 0.843,
+                       "majority_baseline": 0.5358,
+                       "note": "alpha p=0.037 does not survive Bonferroni across 5 tests"})
+
+        with st.expander("Exactly what would be sent (nothing else leaves your machine)"):
+            st.code(describe_payload(facts), language="json")
+            st.caption(
+                "An allow-list, not a filter: only the fields listed above are ever "
+                "transmitted. No database contents, file paths, watchlists or personal data."
+            )
+
+        if st.button("Explain these results", type="primary", disabled=not cfg.enabled):
+            with st.spinner("Asking the model…"):
+                try:
+                    out = explain(facts, cfg)
+                    st.markdown(f"> {out.text}")
+                    st.caption(f"Generated by `{out.model}` · commentary only, "
+                               "not a computation")
+                except AssistantError as exc:
+                    st.error(str(exc))
+
+        st.info(
+            "**Cost note.** A paid API is fine to start with. When you want a free "
+            "option, switch the backend above to **Ollama** or **LM Studio** and run a "
+            "model on your own machine — the protocol is identical, so nothing else in "
+            "the app changes, and your data stops leaving the computer entirely."
+        )
 
     # ── Watchlist ──────────────────────────────────────────────────────────
     with tab_watch:
