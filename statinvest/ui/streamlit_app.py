@@ -57,6 +57,180 @@ def _brand(st, icon_path):  # pragma: no cover - requires the Streamlit runtime
     st.caption(DISCLAIMER)
 
 
+def _real_data_lab(st, pd, service):  # pragma: no cover - requires Streamlit
+    """Fit the market model on two securities the user has actually fetched."""
+    stored = service.stored_symbols()
+    if len(stored) < 2:
+        st.info(
+            "**Fetch at least two securities first.** Go to the *Market data* tab and "
+            "fetch a couple of symbols -- for example `AAPL` and `^GSPC`. Their price "
+            "history is saved to the database, and this tab then models it.\n\n"
+            f"Currently stored with enough history: "
+            f"{', '.join(f'`{s}`' for s in stored) if stored else '_none_'}"
+        )
+        return
+
+    c1, c2, c3 = st.columns([2, 2, 1])
+    default_pred = "^GSPC" if "^GSPC" in stored else stored[0]
+    target = c1.selectbox("Explain this security (Y)", stored, index=0)
+    others = [s for s in stored if s != target] or stored
+    pred_idx = others.index(default_pred) if default_pred in others else 0
+    predictor = c2.selectbox("Using this one (X)", others, index=pred_idx)
+    se_type = c3.selectbox("Std errors", ["hc3", "hc1", "hc0", "classical"], index=0)
+    train_frac = st.slider(
+        "Share of the timeline used for training", 0.50, 0.90, 0.70, 0.05,
+        help="The rest is held back for out-of-sample testing. The split is "
+             "chronological -- never shuffled -- so no future data leaks into the fit.",
+    )
+
+    if not st.button("Fit on real data", type="primary", key="fit_real"):
+        return
+
+    try:
+        out = service.fit_market_model(target, predictor,
+                                       se_type=se_type, train_frac=train_frac)
+    except ValueError as exc:
+        st.error(str(exc))
+        return
+
+    pair, ols, log = out["pair"], out["ols"], out["logistic"]
+    coef = ols["summary"]["coefficients"]
+    beta, alpha = coef[1], coef[0]
+
+    st.caption(
+        f"`{pair['target']} ~ const + {pair['predictor']}` on daily returns  ·  "
+        f"n = {pair['n']:,} aligned trading days  ·  {pair['from']} to {pair['to']}"
+    )
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Beta", f"{beta['coef']:+.4f}", help="Sensitivity to the predictor")
+    m2.metric("R-squared", f"{ols['summary']['r_squared']:.4f}",
+              help="Share of daily variance explained")
+    m3.metric("Alpha /yr", f"{ols['annualised_alpha_pct']:+.2f}%",
+              delta="not significant" if alpha["p_value"] >= 0.05 else "significant",
+              delta_color="off")
+    m4.metric("Out-of-sample AUC", f"{log['out_of_sample']['roc_auc']:.3f}",
+              delta=f"in-sample {log['in_sample']['roc_auc']:.3f}", delta_color="off")
+
+    st.markdown("**OLS coefficients**")
+    st.dataframe(pd.DataFrame(coef), use_container_width=True)
+
+    if ols["heteroskedastic"]:
+        st.warning(
+            f"Residuals are heteroskedastic (Breusch-Pagan p = "
+            f"{ols['breusch_pagan']['p_value']:.2e}). The robust standard error is "
+            f"**{ols['se_inflation_pct']:+.0f}%** versus the classical one -- so the "
+            "classical default, which most tools ship with, would overstate precision here."
+        )
+
+    st.markdown("**Direction model, validated out of sample**")
+    st.dataframe(pd.DataFrame([
+        {"metric": "ROC-AUC",
+         "in-sample": round(log["in_sample"]["roc_auc"], 4),
+         "out-of-sample": round(log["out_of_sample"]["roc_auc"], 4),
+         "baseline": 0.5},
+        {"metric": "Accuracy",
+         "in-sample": round(log["in_sample"]["accuracy"], 4),
+         "out-of-sample": round(log["out_of_sample"]["accuracy"], 4),
+         "baseline": round(log["baseline"], 4)},
+    ]), use_container_width=True)
+    st.caption(
+        f"Trained {log['train_range'][0]} to {log['train_range'][1]}  ·  "
+        f"tested {log['test_range'][0]} to {log['test_range'][1]}  ·  "
+        f"odds ratio per +1% move: {log['odds_ratio_per_1pct']:.2f}x"
+    )
+
+    if log["generalises"]:
+        st.success(
+            f"**This relationship holds out of sample.** AUC "
+            f"{log['in_sample']['roc_auc']:.3f} in-sample -> "
+            f"{log['out_of_sample']['roc_auc']:.3f} on dates the model never saw."
+            + ("" if log["beats_baseline"] else
+               f" It still does not beat always guessing the majority class "
+               f"({log['baseline']:.3f}) on raw accuracy -- ranking better than chance "
+               "and being useful are different claims.")
+        )
+    else:
+        st.error(
+            f"**This relationship does not survive out of sample.** AUC falls from "
+            f"{log['in_sample']['roc_auc']:.3f} in-sample to "
+            f"{log['out_of_sample']['roc_auc']:.3f}"
+            + (" -- worse than a coin flip."
+               if log["out_of_sample"]["roc_auc"] < 0.5 else ".")
+            + (f" The low R-squared ({ols['summary']['r_squared']:.3f}) warned about this "
+               "before the classifier was fitted."
+               if ols["summary"]["r_squared"] < 0.15 else
+               " Note this happened despite a respectable in-sample fit, which is exactly "
+               "why out-of-sample testing is not optional.")
+        )
+
+    for w in ols["summary"].get("warnings", []):
+        st.warning(w)
+
+    st.info(
+        "Association is not prediction, and prediction is not profit. No transaction "
+        "costs, spreads or slippage are modelled anywhere here."
+    )
+
+
+def _synthetic_lab(st, pd):  # pragma: no cover - requires Streamlit
+    """Fit generated data with known coefficients, to verify the estimator."""
+    family = st.radio("Model family", ["OLS", "Logistic", "Poisson"],
+                      horizontal=True, key="lab_family")
+    se_type = "classical"
+    if family == "OLS":
+        se_type = st.radio(
+            "Standard errors", ["classical", "hc0", "hc1", "hc3"],
+            horizontal=True, index=3,
+            help="HC variants are heteroskedasticity-robust. Financial returns are "
+                 "almost always heteroskedastic, so HC3 is the safer default.",
+        )
+    n = st.slider("Sample size", 50, 1000, 300)
+    seed = st.number_input("Random seed", value=0, step=1)
+
+    if st.button("Fit model", type="primary", key="fit_lab"):
+        rng = np.random.default_rng(int(seed))
+        X = rng.normal(size=(n, 2))
+        if family == "OLS":
+            y = 1.0 + 2.0 * X[:, 0] - 1.5 * X[:, 1] + rng.normal(scale=0.5, size=n)
+            model = OLSModel()
+            res = model.fit(X, y, feature_names=["f1", "f2"], se_type=se_type)
+            st.write(f"**Formula:** `y ~ const + f1 + f2` · **R²** = {res.r_squared:.4f} "
+                     f"· **Adj R²** = {res.adj_r_squared:.4f} · n = {res.n}")
+            st.dataframe(pd.DataFrame(res.coefficient_table()), use_container_width=True)
+            d1, d2 = st.columns(2)
+            d1.write("**VIF (multicollinearity)**")
+            d1.json({k: round(v, 3) for k, v in
+                     model.variance_inflation_factors().items()})
+            bp = model.breusch_pagan()
+            d2.write("**Breusch-Pagan (heteroskedasticity)**")
+            d2.json({"statistic": round(bp["statistic"], 3),
+                     "p_value": round(bp["p_value"], 4)})
+            st.caption("True values: const 1.0, f1 2.0, f2 −1.5")
+        elif family == "Logistic":
+            z = 0.5 + 1.5 * X[:, 0] - 1.0 * X[:, 1]
+            y = (rng.uniform(size=n) < 1 / (1 + np.exp(-z))).astype(int)
+            model = LogisticModel()
+            res = model.fit(X, y, feature_names=["f1", "f2"])
+            st.write(f"**Converged:** {res.converged} in {res.n_iter} IRLS iterations · "
+                     f"**McFadden R²** = {res.pseudo_r2_mcfadden:.4f}")
+            st.dataframe(pd.DataFrame(res.coefficient_table()), use_container_width=True)
+            st.json(model.classification_metrics(X, y))
+            st.caption("True values: const 0.5, f1 1.5, f2 −1.0")
+        else:
+            mu = np.exp(0.2 + 0.5 * X[:, 0])
+            y = rng.poisson(mu)
+            model = PoissonModel()
+            res = model.fit(X, y, feature_names=["f1", "f2"])
+            st.write(f"**Converged:** {res.converged} · **Dispersion** = "
+                     f"{res.dispersion:.3f} · **Deviance** = {res.deviance:.1f}")
+            st.dataframe(pd.DataFrame(res.coefficient_table()), use_container_width=True)
+            st.caption("True values: const 0.2, f1 0.5. Dispersion ≈ 1 means "
+                       "the Poisson assumption holds.")
+        for w in res.warnings:
+            st.warning(w)
+
+
 def _run():  # pragma: no cover - requires the Streamlit runtime
     import pandas as pd
     import streamlit as st
@@ -149,60 +323,21 @@ def _run():  # pragma: no cover - requires the Streamlit runtime
     # ── Model lab ──────────────────────────────────────────────────────────
     with tab_lab:
         st.subheader("Model laboratory")
-        family = st.radio("Model family", ["OLS", "Logistic", "Poisson"],
-                          horizontal=True, key="lab_family")
-        se_type = "classical"
-        if family == "OLS":
-            se_type = st.radio(
-                "Standard errors", ["classical", "hc0", "hc1", "hc3"],
-                horizontal=True, index=3,
-                help="HC variants are heteroskedasticity-robust. Financial returns are "
-                     "almost always heteroskedastic, so HC3 is the safer default.",
-            )
-        n = st.slider("Sample size", 50, 1000, 300)
-        seed = st.number_input("Random seed", value=0, step=1)
+        source = st.radio(
+            "Data source", ["Real market data", "Synthetic (known parameters)"],
+            horizontal=True, key="lab_source",
+            help="Real: fit on securities you have fetched. Synthetic: fit on "
+                 "generated data whose true coefficients are known, to verify "
+                 "the estimator itself.",
+        )
+        st.divider()
 
-        if st.button("Fit model", type="primary", key="fit_lab"):
-            rng = np.random.default_rng(int(seed))
-            X = rng.normal(size=(n, 2))
-            if family == "OLS":
-                y = 1.0 + 2.0 * X[:, 0] - 1.5 * X[:, 1] + rng.normal(scale=0.5, size=n)
-                model = OLSModel()
-                res = model.fit(X, y, feature_names=["f1", "f2"], se_type=se_type)
-                st.write(f"**Formula:** `y ~ const + f1 + f2` · **R²** = {res.r_squared:.4f} "
-                         f"· **Adj R²** = {res.adj_r_squared:.4f} · n = {res.n}")
-                st.dataframe(pd.DataFrame(res.coefficient_table()), use_container_width=True)
-                d1, d2 = st.columns(2)
-                d1.write("**VIF (multicollinearity)**")
-                d1.json({k: round(v, 3) for k, v in
-                         model.variance_inflation_factors().items()})
-                bp = model.breusch_pagan()
-                d2.write("**Breusch-Pagan (heteroskedasticity)**")
-                d2.json({"statistic": round(bp["statistic"], 3),
-                         "p_value": round(bp["p_value"], 4)})
-                st.caption("True values: const 1.0, f1 2.0, f2 −1.5")
-            elif family == "Logistic":
-                z = 0.5 + 1.5 * X[:, 0] - 1.0 * X[:, 1]
-                y = (rng.uniform(size=n) < 1 / (1 + np.exp(-z))).astype(int)
-                model = LogisticModel()
-                res = model.fit(X, y, feature_names=["f1", "f2"])
-                st.write(f"**Converged:** {res.converged} in {res.n_iter} IRLS iterations · "
-                         f"**McFadden R²** = {res.pseudo_r2_mcfadden:.4f}")
-                st.dataframe(pd.DataFrame(res.coefficient_table()), use_container_width=True)
-                st.json(model.classification_metrics(X, y))
-                st.caption("True values: const 0.5, f1 1.5, f2 −1.0")
-            else:
-                mu = np.exp(0.2 + 0.5 * X[:, 0])
-                y = rng.poisson(mu)
-                model = PoissonModel()
-                res = model.fit(X, y, feature_names=["f1", "f2"])
-                st.write(f"**Converged:** {res.converged} · **Dispersion** = "
-                         f"{res.dispersion:.3f} · **Deviance** = {res.deviance:.1f}")
-                st.dataframe(pd.DataFrame(res.coefficient_table()), use_container_width=True)
-                st.caption("True values: const 0.2, f1 0.5. Dispersion ≈ 1 means "
-                           "the Poisson assumption holds.")
-            for w in res.warnings:
-                st.warning(w)
+    if source.startswith("Real"):
+        with tab_lab:
+            _real_data_lab(st, pd, service)
+    else:
+        with tab_lab:
+            _synthetic_lab(st, pd)
 
     # ── Estimator comparison: closed form vs SGD vs Adam ───────────────────
     with tab_optim:

@@ -347,7 +347,7 @@ class YahooChartProvider:
         return None
 
     def fetch(self, symbol: str, with_history: bool = False,
-              history_points: int = 250) -> MarketData:
+              history_points: int = 2000) -> MarketData:
         sym = validate_symbol(symbol)
         doc = self._get(sym)
         if not doc or not doc.get("chart", {}).get("result"):

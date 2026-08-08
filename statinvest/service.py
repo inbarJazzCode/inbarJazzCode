@@ -17,6 +17,10 @@ from statinvest.database.repository import AssetRecord, Repository, SnapshotReco
 from statinvest.market.provider import MarketData, get_provider
 from statinvest.market.validate import validate_symbol
 
+# Minimum stored bars before a pair is worth modelling. Below this the
+# standard errors are too wide for any conclusion to survive.
+MIN_HISTORY_ROWS = 60
+
 
 class AnalysisService:
     def __init__(self, db: Database | None = None, provider_name: str = "synthetic"):
@@ -102,6 +106,152 @@ class AnalysisService:
                 "notes": r.get("notes"),
             })
         return out
+
+    # -- modelling on real stored securities ---------------------------------
+    def stored_symbols(self, interval: str = "1d") -> list[str]:
+        """Symbols that have enough stored history to model."""
+        with self.db.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT a.symbol, COUNT(*) AS n
+                FROM price_history h
+                JOIN assets a ON a.id = h.asset_id
+                WHERE h.interval = ?
+                GROUP BY a.symbol
+                HAVING n >= ?
+                ORDER BY a.symbol
+                """,
+                (interval, MIN_HISTORY_ROWS),
+            ).fetchall()
+        return [r["symbol"] for r in rows]
+
+    def returns_pair(self, target: str, predictor: str,
+                     interval: str = "1d") -> dict:
+        """Aligned daily simple returns for two stored securities.
+
+        Returns are used rather than price levels: regressing one price series
+        on another is a spurious regression, since both are non-stationary.
+        Only dates present in *both* series are kept, so the pair is aligned on
+        a shared calendar (relevant when the two trade on different exchanges).
+        """
+        target = validate_symbol(target)
+        predictor = validate_symbol(predictor)
+        if target == predictor:
+            raise ValueError(
+                "Target and predictor must be different securities; regressing "
+                "a series on itself is not a meaningful model."
+            )
+
+        def closes(sym: str) -> dict:
+            rows = self.repo.get_price_history(sym, interval)
+            out = {}
+            for r in rows:
+                price = r.get("adj_close")
+                if price is None:
+                    price = r.get("close")
+                if price is not None:
+                    out[r["ts_utc"][:10]] = float(price)
+            return out
+
+        a, b = closes(target), closes(predictor)
+        for sym, series in ((target, a), (predictor, b)):
+            if len(series) < MIN_HISTORY_ROWS:
+                raise ValueError(
+                    f"Not enough stored history for {sym} "
+                    f"({len(series)} rows, need {MIN_HISTORY_ROWS}). "
+                    "Fetch it on the Market data tab first."
+                )
+
+        dates = sorted(set(a) & set(b))
+        if len(dates) < MIN_HISTORY_ROWS:
+            raise ValueError(
+                f"{target} and {predictor} only overlap on {len(dates)} dates "
+                f"(need {MIN_HISTORY_ROWS}). Their trading calendars may differ."
+            )
+
+        y, x, when = [], [], []
+        for i in range(1, len(dates)):
+            prev, cur = dates[i - 1], dates[i]
+            y.append((a[cur] - a[prev]) / a[prev])
+            x.append((b[cur] - b[prev]) / b[prev])
+            when.append(cur)
+        return {"target": target, "predictor": predictor,
+                "y": y, "x": x, "dates": when, "n": len(y)}
+
+    def fit_market_model(self, target: str, predictor: str,
+                         interval: str = "1d", se_type: str = "hc3",
+                         train_frac: float = 0.70) -> dict:
+        """Fit OLS and a logistic direction model on two real securities.
+
+        Runs the full honest analysis in one call: the market model with robust
+        standard errors, a heteroskedasticity test, a chronologically split
+        logistic classifier, and the majority-class baseline it must beat.
+        Nothing here is shuffled -- every training date precedes every test date.
+        """
+        import numpy as np
+
+        from statinvest.models.evaluation import chronological_split
+        from statinvest.models.linear import OLSModel
+        from statinvest.models.logistic import LogisticModel
+
+        pair = self.returns_pair(target, predictor, interval)
+        y = np.asarray(pair["y"], dtype=float)
+        x = np.asarray(pair["x"], dtype=float)
+        dates = pair["dates"]
+
+        ols = OLSModel()
+        res = ols.fit(x.reshape(-1, 1), y,
+                      feature_names=[f"r_{predictor}"], se_type=se_type)
+        classical = OLSModel().fit(x.reshape(-1, 1), y,
+                                   feature_names=[f"r_{predictor}"],
+                                   se_type="classical")
+        bp = ols.breusch_pagan()
+
+        robust_se = res.coefficient_table()[1]["std_err"]
+        naive_se = classical.coefficient_table()[1]["std_err"]
+        se_inflation = (robust_se / naive_se - 1) * 100 if naive_se else float("nan")
+
+        # Direction model, validated on dates the fit never saw.
+        binary = (y > 0).astype(int)
+        feature = x.reshape(-1, 1) * 100  # percent, so the odds ratio reads per 1%
+        split = chronological_split(len(y), train_frac, 0.0)
+        tr, te = split.train_idx, split.test_idx
+
+        full = LogisticModel()
+        full_res = full.fit(feature, binary, feature_names=["mkt"])
+        split_model = LogisticModel()
+        split_model.fit(feature[tr], binary[tr], feature_names=["mkt"])
+        in_sample = split_model.classification_metrics(feature[tr], binary[tr])
+        out_sample = split_model.classification_metrics(feature[te], binary[te])
+        up_rate = float(binary[te].mean())
+        baseline = max(up_rate, 1 - up_rate)
+
+        return {
+            "pair": {"target": target, "predictor": predictor, "n": pair["n"],
+                     "from": dates[0], "to": dates[-1], "interval": interval},
+            "ols": {
+                "summary": res.summary(),
+                "se_type": se_type,
+                "se_inflation_pct": se_inflation,
+                "breusch_pagan": bp,
+                "heteroskedastic": bp["p_value"] < 0.05,
+                "annualised_alpha_pct": float(res.params[0] * 252 * 100),
+            },
+            "logistic": {
+                "converged": full_res.converged,
+                "odds_ratio_per_1pct": float(
+                    full_res.coefficient_table()[1]["odds_ratio"]),
+                "p_value": float(full_res.coefficient_table()[1]["p_value"]),
+                "mcfadden_r2": float(full_res.pseudo_r2_mcfadden),
+                "in_sample": in_sample,
+                "out_of_sample": out_sample,
+                "baseline": baseline,
+                "train_range": [dates[tr[0]], dates[tr[-1]]],
+                "test_range": [dates[te[0]], dates[te[-1]]],
+                "generalises": out_sample["roc_auc"] >= 0.60,
+                "beats_baseline": out_sample["accuracy"] > baseline,
+            },
+        }
 
     # -- status --------------------------------------------------------------
     def status(self) -> dict:

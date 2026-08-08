@@ -56,6 +56,15 @@ On Windows, `run_windows.bat [mode]` wraps the same launcher.
 | Logistic | IRLS (Newton)                | stable sigmoid & log-loss, ROC-AUC / PR-AUC, separation & imbalance warnings |
 | Poisson  | IRLS, log link               | offset/exposure, deviance, Pearson residuals, overdispersion & excess-zero warnings |
 
+### Modelling real securities
+
+Fetch two symbols on the **Market data** tab, then open the **Model lab** and pick
+them from the dropdowns. The app fits the market model on their actual aligned daily
+returns, with HC3 robust standard errors, a heteroskedasticity test, and a
+chronologically split direction model tested on dates the fit never saw. Whether the
+relationship generalises is stated plainly, alongside the majority-class baseline it
+has to beat.
+
 Supporting tools: auditable level/log transformations, an SGD/Adam optimization
 lab with finite-difference gradient checks and reference-estimator comparison,
 and leakage-resistant chronological / walk-forward splitting.
