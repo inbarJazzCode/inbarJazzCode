@@ -51,3 +51,6 @@ grandma_results/*/backups/
 *.key
 secrets.toml
 .streamlit/secrets.toml
+
+# Release: keep the ZIP and notes, not the unpacked tree
+grandma_results/Invest-System_v1.0.0_*/
