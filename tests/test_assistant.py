@@ -91,3 +91,35 @@ def test_no_network_call_when_disabled(monkeypatch):
     with pytest.raises(AssistantError):
         explain({"result": {}})
     assert called == []
+
+
+# -- source hygiene -----------------------------------------------------------
+def test_source_has_no_non_latin_text():
+    """All source is English.
+
+    Guards against non-Latin text creeping back into comments or UI strings.
+    Ranges are given as codepoints so this file stays pure ASCII itself.
+    """
+    import pathlib
+
+    # Hebrew U+0590-U+05FF, Arabic U+0600-U+06FF, Cyrillic U+0400-U+04FF
+    blocks = ((0x0590, 0x05FF), (0x0600, 0x06FF), (0x0400, 0x04FF))
+    exts = {".py", ".bat", ".sh", ".ps1", ".spec", ".toml", ".ini"}
+    skip = {".git", "grandma_results", ".venv", "__pycache__", "node_modules"}
+
+    offenders = []
+    root = pathlib.Path(__file__).resolve().parents[1]
+    for path in root.rglob("*"):
+        if not path.is_file() or path.suffix not in exts:
+            continue
+        if any(part in skip for part in path.parts):
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+        for lineno, line in enumerate(text.splitlines(), 1):
+            if any(lo <= ord(ch) <= hi for ch in line for lo, hi in blocks):
+                offenders.append(f"{path.relative_to(root)}:{lineno}")
+
+    assert not offenders, "Non-English text in source: " + ", ".join(offenders)

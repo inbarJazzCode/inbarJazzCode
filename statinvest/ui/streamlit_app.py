@@ -124,9 +124,9 @@ def _run():  # pragma: no cover - requires the Streamlit runtime
             price = md["normalized_price"]
             m1.metric("Price", f"{price:,.2f} {md['normalized_currency'] or ''}"
                       if price else "—")
-            # מכפיל רווח — trailing price/earnings ratio
+            # Trailing price/earnings ratio.
             pe = md["trailing_pe"]
-            m2.metric("מכפיל רווח · P/E (trailing)", f"{pe:.2f}" if pe else "n/a")
+            m2.metric("P/E (trailing)", f"{pe:.2f}" if pe else "n/a")
             fpe = md["forward_pe"]
             m3.metric("Forward P/E", f"{fpe:.2f}" if fpe else "n/a")
             mc = md["market_cap"]
